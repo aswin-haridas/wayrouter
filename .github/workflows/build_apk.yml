@@ -29,17 +29,17 @@ jobs:
       - name: Verify Flutter installation
         run: |
           flutter doctor -v
-          cd wayrouter && flutter pub get
+          flutter pub get
 
       - name: Build APK
         run: |
-          cd wayrouter && flutter build apk --release --obfuscate --split-debug-info=/tmp/debug-info
+          flutter build apk --release --obfuscate --split-debug-info=/tmp/debug-info
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: wayrouter-apk
-          path: wayrouter/build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
   publish:
@@ -52,12 +52,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: wayrouter-apk
-          path: wayrouter/build/app/outputs/flutter-apk/
+          path: build/app/outputs/flutter-apk/
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: wayrouter/build/app/outputs/flutter-apk/app-release.apk
+          files: build/app/outputs/flutter-apk/app-release.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

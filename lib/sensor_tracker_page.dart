@@ -8,6 +8,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_compass/flutter_compass.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'services/mongo_service.dart';
 import 'services/location_tracker.dart';
 
@@ -21,6 +22,8 @@ class SensorTrackerPage extends StatefulWidget {
 class _SensorTrackerPageState extends State<SensorTrackerPage>
     with TickerProviderStateMixin {
   final MongoService _mongoService = MongoService();
+  final TextEditingController _manualTextController = TextEditingController();
+  StreamSubscription? _sharingIntentSub;
 
   String _getMotionStateLabel(MotionState state) {
     switch (state) {
@@ -54,6 +57,7 @@ class _SensorTrackerPageState extends State<SensorTrackerPage>
     _mapController = MapController();
     _checkPermissions();
     _checkServiceStatus();
+    _initSharingListener();
 
     // Setup initial location centering
     Geolocator.getCurrentPosition(
@@ -128,6 +132,98 @@ class _SensorTrackerPageState extends State<SensorTrackerPage>
     });
   }
 
+  void _initSharingListener() {
+    _sharingIntentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
+      if (value.isNotEmpty) {
+        _handleSharedText(value.first.path);
+        ReceiveSharingIntent.instance.reset();
+      }
+    });
+    ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+      if (value.isNotEmpty) {
+        _handleSharedText(value.first.path);
+        ReceiveSharingIntent.instance.reset();
+      }
+    });
+  }
+
+  Future<void> _handleSharedText(String text) async {
+    if (text.trim().isEmpty) return;
+    try {
+      await _mongoService.saveSharedContent(text);
+      _showSnackBar('Shared content saved to MongoDB!');
+    } catch (e) {
+      _showSnackBar('Failed to save: $e');
+    }
+  }
+
+  Future<void> _saveManualText() async {
+    final text = _manualTextController.text.trim();
+    if (text.isEmpty) return;
+    try {
+      await _mongoService.saveSharedContent(text);
+      _manualTextController.clear();
+      _showSnackBar('Saved successfully!');
+    } catch (e) {
+      _showSnackBar('Error: $e');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _buildSharedContentCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _manualTextController,
+              decoration: InputDecoration(
+                hintText: 'Paste text or links here...',
+                hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13.5),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFF43F5E), width: 1.5),
+                ),
+              ),
+              style: const TextStyle(fontSize: 13.5),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filled(
+            onPressed: _saveManualText,
+            icon: const Icon(Icons.send_rounded),
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFFF43F5E),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _positionSubscription?.cancel();
@@ -135,6 +231,8 @@ class _SensorTrackerPageState extends State<SensorTrackerPage>
     _recenterTimer?.cancel();
     _mapAnimationController?.stop();
     _mapAnimationController?.dispose();
+    _sharingIntentSub?.cancel();
+    _manualTextController.dispose();
     super.dispose();
   }
 
@@ -414,7 +512,8 @@ class _SensorTrackerPageState extends State<SensorTrackerPage>
         ],
       ),
       body: SafeArea(
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           children: [
             Container(
               height: 240,
@@ -500,9 +599,11 @@ class _SensorTrackerPageState extends State<SensorTrackerPage>
             ),
             const SizedBox(height: 8),
             _buildLocationDetailsCard(),
+            _buildSharedContentCard(),
           ],
         ),
       ),
+    ),
     );
   }
 }

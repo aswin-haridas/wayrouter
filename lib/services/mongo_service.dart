@@ -72,6 +72,7 @@ class MongoService {
       _log('Connected to MongoDB');
     } catch (e) {
       _log('Error connecting to MongoDB: $e');
+      rethrow;
     }
   }
 
@@ -173,6 +174,14 @@ class MongoService {
 
     _pendingCount = await _queue.count();
     _lastPosition = position;
+  }
+
+  Future<void> saveSharedContent(String content) async {
+    if (_db == null || !_db!.isConnected) await connect();
+    await _db!.collection('shared_data').insert({
+      'content': content,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
   }
 
   // ---------------------------------------------------------------------------
